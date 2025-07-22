@@ -6,9 +6,17 @@
 #ACTING AS THE WEBCAMS FROM NORO SCREEN
 import cv2 as cv
 import mediapipe as mp #hand detection by Google
+import time #to make QR code popup temporary
  
+#init webcam class
 webcam = cv.VideoCapture(1) #'1'= index of cameras -- this case, my default computer camera. 
 #don't know how to make it be multiple cameras in the case for Noro (3 cameras)
+
+#not important: checking if camera is opened
+if not webcam.isOpened(): #if camera is not opened --> exit
+    print("Cannot open camera")
+    exit()
+
 
 #initializing hand detection things
 mp_hands = mp.solutions.hands
@@ -21,11 +29,12 @@ hand = mp_hands.Hands(
     min_tracking_confidence=0.5 #random value. dont know what it does exactly
 )
 
-if not webcam.isOpened(): #if camera is not opened --> exit
-    print("Cannot open camera")
-    exit()
+#defining QR code things
+qrcode_is_shown = False #starts as qrcode hidden
+qrcode_shown_start_time = 0 #starts at 0 seconds. going to last for 15 seconds (can be changed obviously)
 
-#main video loop
+
+#MAIN CAMERA LOOP
 while True: #camera on until user presses 'q'
     ret, frame = webcam.read() #ret: boolean value(True if camera gives a frame, False if not)
     #frame: the actual individual frame from the video that were seeing ?
@@ -36,17 +45,30 @@ while True: #camera on until user presses 'q'
 
     #opencv uses BGR, mediapipe uses RGB. fixing order from BGR to RGB:
     new_RBG_frame = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
-    result = hand.process(new_RBG_frame)
-    if result.multi_hand_landmarks: #if multiple hands are detected
-        for hand_landmarks in result.multi_hand_landmarks:
-            print(hand_landmarks) #prints coordinates of each landmark on the hand
-            mp_drawing.draw_landmarks(new_RBG_frame, hand_landmarks, mp_hands.HAND_CONNECTIONS) #draws the green/red dots/lines on the hand
 
+    #actual hand detection process
+    result = hand.process(new_RBG_frame)
+    if result.multi_hand_landmarks: #if at least 1 hand is detected:
+        for hand_landmarks in result.multi_hand_landmarks:
+            #print(hand_landmarks) #prints coordinates of each landmark on the hand
+            #print(result.multi_hand_landmarks)
+            #mp_drawing.draw_landmarks(new_RBG_frame, hand_landmarks, mp_hands.HAND_CONNECTIONS) #draws the green/red dots/lines on the hand
+    
+            #checking if index finger is up
+            if hand_landmarks.landmark[8].y < hand_landmarks.landmark[5].y: #[8] is the index finger tip, 
+                #[5] is the index finger bottom. #also, point 0,0 is top left corner so thats why '<' and not '>'
+                
+                #if index tip is higher than bottom, then index finger is up
+                print("Index finger is up")
+
+                
+
+    #displaying frames in a window
     cv.imshow('frame', new_RBG_frame) #displays frames in a window(thats what imshow does: opens a new window)
     if cv.waitKey(1) == ord('q'): #exit if user presses 'q'
         break
  
-webcam.release() 
+webcam.release()
 cv.destroyAllWindows()
 
 
