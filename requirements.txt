@@ -1,1 +1,2 @@
-qrcode[pil]
+qrcode
+opencv-python
