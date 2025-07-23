@@ -76,11 +76,14 @@ def print_result(result: HandLandmarkerResult, output_image: mp.Image, timestamp
             # mp_drawing.draw_landmarks(new_RBG_frame, hand_landmarks, mp_hands.HAND_CONNECTIONS) #draws the green/red dots/lines on the hand
     
             #checking if index finger is only finger up
+
+            finger_threshold = 0.05  # increase to make detection stricter
+
             if (
-                hand_landmarks[8].y < hand_landmarks[5].y and 
-                hand_landmarks[12].y > hand_landmarks[9].y and 
-                hand_landmarks[16].y > hand_landmarks[13].y and 
-                hand_landmarks[20].y > hand_landmarks[17].y): 
+                hand_landmarks[8].y < hand_landmarks[5].y - finger_threshold and 
+                hand_landmarks[12].y > hand_landmarks[9].y + finger_threshold and 
+                hand_landmarks[16].y > hand_landmarks[13].y + finger_threshold and 
+                hand_landmarks[20].y > hand_landmarks[17].y + finger_threshold): 
                 #[8] is the index finger tip. [5] is the index finger bottom. 
                 # #also, point 0,0 is top left corner so thats why '<' and not '>'
                 #if index tip is higher than bottom, then index finger is up
