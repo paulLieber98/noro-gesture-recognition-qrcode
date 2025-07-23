@@ -76,7 +76,11 @@ def print_result(result: HandLandmarkerResult, output_image: mp.Image, timestamp
             # mp_drawing.draw_landmarks(new_RBG_frame, hand_landmarks, mp_hands.HAND_CONNECTIONS) #draws the green/red dots/lines on the hand
     
             #checking if index finger is only finger up
-            if hand_landmarks[8].y < hand_landmarks[5].y and hand_landmarks[12].y > hand_landmarks[9].y and hand_landmarks[16].y > hand_landmarks[13].y and hand_landmarks[20].y > hand_landmarks[17].y: 
+            if (
+                hand_landmarks[8].y < hand_landmarks[5].y and 
+                hand_landmarks[12].y > hand_landmarks[9].y and 
+                hand_landmarks[16].y > hand_landmarks[13].y and 
+                hand_landmarks[20].y > hand_landmarks[17].y): 
                 #[8] is the index finger tip. [5] is the index finger bottom. 
                 # #also, point 0,0 is top left corner so thats why '<' and not '>'
                 #if index tip is higher than bottom, then index finger is up
@@ -133,7 +137,7 @@ with HandLandmarker.create_from_options(options) as landmarker:
         new_RBG_frame = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
         #convert opencv image to mediapipe image
         mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=new_RBG_frame) #doing this bc mediapipe doesn't use numpy frames like opencv does
-            #mp.ImageFormat.SRGB = 'RBG' simply
+            #mp.ImageFormat.SRGB is the same thing as 'RBG' simply
 
 
 
@@ -147,8 +151,8 @@ with HandLandmarker.create_from_options(options) as landmarker:
         if should_show_qrcode:
             qrcode_is_shown = True
             qrcode_shown_start_time = time.time()
-            qrcode = generate_qr()
-            cv.imshow('QR Code', qrcode)
+            qrcode_generated = generate_qr()
+            cv.imshow('QR Code', qrcode_generated)
             print("QR Code is being shown")
             should_show_qrcode = False #resetting to False so that it doesnt show again
 
