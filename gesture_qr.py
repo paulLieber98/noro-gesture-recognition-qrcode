@@ -77,7 +77,7 @@ def print_result(result: HandLandmarkerResult, output_image: mp.Image, timestamp
     
             #checking if index finger is only finger up
 
-            finger_threshold = 0.05  # increase to make detection stricter
+            finger_threshold = 0.025 # increase to make detection stricter
 
             if (
                 hand_landmarks[8].y < hand_landmarks[5].y - finger_threshold and 
