@@ -24,13 +24,39 @@ import numpy as np
  
 
 #init webcam class
+#COMMENT this once at Noro office to use their cameras
+#----------------------------------------------------------------------------------------------------------------------------------
 webcam = cv.VideoCapture(1) #'1'= index of cameras -- this case, my default computer camera. 
-#don't know how to make it be multiple cameras in the case for Noro (3 cameras)
+# don't know how to make it be multiple cameras in the case for Noro (3 cameras)
+#----------------------------------------------------------------------------------------------------------------------------------
 
-#not important: checking if camera is opened
+
+#UNCOMMENT this once at Noro office to use their cameras + change above index
+#//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+# cam0 = cv.VideoCapture(0)
+# cam1 = cv.VideoCapture(1)
+# cam2 = cv.VideoCapture(2)
+#//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+
+#COMMENT this once at Noro office to use their cameras
+#----------------------------------------------------------------------------------------------------------------------------------
 if not webcam.isOpened(): #if camera is not opened --> exit
     print("Cannot open camera")
     exit()
+#----------------------------------------------------------------------------------------------------------------------------------
+
+
+
+#UNCOMMENT this once at Noro office to use their cameras + change above index
+#//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+# for i, cam in enumerate([cam0, cam1, cam2]):
+#     if not cam.isOpened(): #if camera is not opened --> exit
+#         print(f"Cannot open camera {i}")
+#         exit()
+#//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 
 #defining QR code things
 qrcode_is_shown = False #starts as qrcode hidden
@@ -79,6 +105,7 @@ def print_result(result: HandLandmarkerResult, output_image: mp.Image, timestamp
 
             finger_threshold = 0.025 # increase to make detection stricter
 
+
             if (
                 hand_landmarks[8].y < hand_landmarks[5].y - finger_threshold and 
                 hand_landmarks[12].y > hand_landmarks[9].y + finger_threshold and 
@@ -94,6 +121,8 @@ def print_result(result: HandLandmarkerResult, output_image: mp.Image, timestamp
 
                 #qrcode popup
                 # global qrcode_is_shown
+
+                # print(f'x: {hand_landmarks[8].x}, y: {hand_landmarks[8].y}, z: {hand_landmarks[8].z}')
 
                 global should_show_qrcode, qrcode_is_shown
 
@@ -129,26 +158,51 @@ options = HandLandmarkerOptions(
 with HandLandmarker.create_from_options(options) as landmarker:
     #MAIN CAMERA LOOP
     while True: #camera on until user presses 'q'
+
+        #UNCOMMENT this once at Noro office to use their cameras + change above index 
+        #//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        # for i, cam in enumerate([cam0, cam1, cam2]):
+        #     ret, frame = cam.read()
+        #     if not ret: #if camera didn't give a frame --> exit
+        #         print("Can't receive frame (stream end?). Exiting ...")
+        #         continue #doesnt break out of the loop. just continues to the next camera
+
+        #     rgb_frame_allcams = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
+        #     mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame_allcams)
+        #     timestamp_ms = int(time.time() * 1000)
+        #     landmarker.detect_async(mp_image, timestamp_ms)
+
+        #     final_frame_allcams = cv.cvtColor(rgb_frame_allcams, cv.COLOR_RGB2BGR)
+        #     cv.imshow(f'Camera {i}', final_frame_allcams)  # show per-camera window
+            #//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+        #COMMENT this once at Noro office to use their cameras
+        # FROM THIS----------------------------------------------------------------------------------------------------------------------------------
         ret, frame = webcam.read() #ret: boolean value(True if camera gives a frame, False if not)
-        #frame: the actual individual frame from the video that were seeing ?
+        # frame: the actual individual frame from the video that were seeing ?
     
         if not ret: #if camera didn't give a frame --> exit
             print("Can't receive frame (stream end?). Exiting ...")
             break
+        
 
-        #opencv uses BGR, mediapipe uses RGB. fixing order from BGR to RGB:
+        # opencv uses BGR, mediapipe uses RGB. fixing order from BGR to RGB:
         new_RBG_frame = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
         #convert opencv image to mediapipe image
         mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=new_RBG_frame) #doing this bc mediapipe doesn't use numpy frames like opencv does
             #mp.ImageFormat.SRGB is the same thing as 'RBG' simply
 
 
-
         #real time feed so we need to give the timestamp of each individual frame since were using 'live stream' mode
         timestamp_ms = int(time.time() * 1000) #timestamp in milliseconds
         landmarker.detect_async(mp_image, timestamp_ms) # processes and detects hands in video frame
 
-
+        #  to get rid of blue-ish color lens, we need to convert back to BGR
+        final_frame = cv.cvtColor(new_RBG_frame, cv.COLOR_RGB2BGR)
+        #displaying frames in a window
+        cv.imshow('frame', final_frame) #displays frames in a window(thats what imshow does: opens a new window)
+        #TO THIS!!!----------------------------------------------------------------------------------------------------------------------------------
 
         #displaying qrcode if it should be shown
         if should_show_qrcode:
@@ -166,35 +220,23 @@ with HandLandmarker.create_from_options(options) as landmarker:
             qrcode_shown_start_time = 0
             cv.destroyWindow('QR Code')
 
-            
-            
-
-        #actual hand detection process
-        # result = hand.detect_async(new_RBG_frame)
-        # if result.multi_hand_landmarks: #if at least 1 hand is detected:
-        #     for hand_landmarks in result.multi_hand_landmarks:
-        #         # print(hand_landmarks) #prints coordinates of each landmark on the hand
-        #         #print(result.multi_hand_landmarks)
-        #         mp_drawing.draw_landmarks(new_RBG_frame, hand_landmarks, mp_hands.HAND_CONNECTIONS) #draws the green/red dots/lines on the hand
-        
-        #         #checking if index finger is up
-        #         if hand_landmarks.landmark[8].y < hand_landmarks.landmark[5].y: #[8] is the index finger tip, 
-        #             #[5] is the index finger bottom. #also, point 0,0 is top left corner so thats why '<' and not '>'
-                    
-        #             #if index tip is higher than bottom, then index finger is up
-        #             print("Index finger is up")
-
-
-        #to get rid of blue-ish color lens, we need to convert back to BGR
-        final_frame = cv.cvtColor(new_RBG_frame, cv.COLOR_RGB2BGR)
-        #displaying frames in a window
-        cv.imshow('frame', final_frame) #displays frames in a window(thats what imshow does: opens a new window)
 
         if cv.waitKey(1) == ord('q'): #exit if user presses 'q'
             break
 
- 
+#UNCOMMENT this once at Noro office to use their cameras + change above index
+#//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+# cam0.release()
+# cam1.release()
+# cam2.release()
+#//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+# COMMENT this once at Noro office to use their cameras
+#----------------------------------------------------------------------------------------------------------------------------------
 webcam.release()
+#----------------------------------------------------------------------------------------------------------------------------------
+
 cv.destroyAllWindows()
 
 
