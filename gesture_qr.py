@@ -160,7 +160,7 @@ with HandLandmarker.create_from_options(options) as landmarker:
             should_show_qrcode = False #resetting to False so that it doesnt show again
 
         #temporary popup for qrcode
-        if qrcode_is_shown and time.time() - qrcode_shown_start_time >= 15: 
+        if qrcode_is_shown and time.time() - qrcode_shown_start_time >= 10: # 10 seconds is the time qrcode is shown for
             #time.time() = current time - the start time gives us the total time qrcode has been shown
             qrcode_is_shown = False
             qrcode_shown_start_time = 0
@@ -185,8 +185,11 @@ with HandLandmarker.create_from_options(options) as landmarker:
         #             print("Index finger is up")
 
 
+        #to get rid of blue-ish color lens, we need to convert back to BGR
+        final_frame = cv.cvtColor(new_RBG_frame, cv.COLOR_RGB2BGR)
         #displaying frames in a window
-        cv.imshow('frame', new_RBG_frame) #displays frames in a window(thats what imshow does: opens a new window)
+        cv.imshow('frame', final_frame) #displays frames in a window(thats what imshow does: opens a new window)
+
         if cv.waitKey(1) == ord('q'): #exit if user presses 'q'
             break
 
