@@ -23,8 +23,14 @@ import qrcode
 import numpy as np
  
 
-#init webcam class
-webcam = cv.VideoCapture(1)  #'1'= index of cameras -- this case, my default computer web-camera. 
+cam0 = cv.VideoCapture(0)
+cam1 = cv.VideoCapture(1)
+cam2 = cv.VideoCapture(2)
+
+for i, cam in enumerate([cam0, cam1, cam2]):
+    if not cam.isOpened(): #if camera is not opened --> exit
+        print(f"Cannot open camera {i}")
+        exit()
 
 
 #defining QR code things
@@ -107,30 +113,19 @@ with HandLandmarker.create_from_options(options) as landmarker:
     #MAIN CAMERA LOOP
     while True: #camera on until user presses 'q'
 
-        ret, frame = webcam.read() #ret: boolean value(True if camera gives a frame, False if not)
-        # frame: the actual individual frame from the video that were seeing ?
-    
-        if not ret: #if camera didn't give a frame --> exit
-            print("Can't receive frame (stream end?). Exiting ...")
-            break
-        
+        for i, cam in enumerate([cam0, cam1, cam2]):
+            ret, frame = cam.read()
+            if not ret: #if camera didn't give a frame --> exit
+                print("Can't receive frame (stream end?). Exiting ...")
+                continue #doesnt break out of the loop. just continues to the next camera
 
-        # opencv uses BGR, mediapipe uses RGB. fixing order from BGR to RGB:
-        new_RBG_frame = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
-        #convert opencv image to mediapipe image
-        mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=new_RBG_frame) #doing this bc mediapipe doesn't use numpy frames like opencv does
-            #mp.ImageFormat.SRGB is the same thing as 'RBG' simply
+            rgb_frame_allcams = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
+            mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame_allcams)
+            timestamp_ms = int(time.time() * 1000)
+            landmarker.detect_async(mp_image, timestamp_ms)
 
-
-        #real time feed so we need to give the timestamp of each individual frame since were using 'live stream' mode
-        timestamp_ms = int(time.time() * 1000) #timestamp in milliseconds
-        landmarker.detect_async(mp_image, timestamp_ms) # processes and detects hands in video frame
-
-        #  to get rid of blue-ish color lens, we need to convert back to BGR
-        final_frame = cv.cvtColor(new_RBG_frame, cv.COLOR_RGB2BGR)
-        #displaying frames in a window
-        cv.imshow('frame', final_frame) #displays frames in a window(thats what imshow does: opens a new window)
-
+            final_frame_allcams = cv.cvtColor(rgb_frame_allcams, cv.COLOR_RGB2BGR)
+            cv.imshow(f'Camera {i}', final_frame_allcams)  # show per-camera window
 
         #displaying qrcode if it should be shown
         if should_show_qrcode:
@@ -152,7 +147,9 @@ with HandLandmarker.create_from_options(options) as landmarker:
         if cv.waitKey(1) == ord('q'): #exit if user presses 'q'
             break
 
-webcam.release()
+cam0.release()
+cam1.release()
+cam2.release()
 
 cv.destroyAllWindows()
 
