@@ -8,6 +8,8 @@
 #ACTING AS THE WEBCAMS FROM NORO SCREEN
 import cv2 as cv
 
+
+
 import mediapipe as mp #hand detection by Google
 from mediapipe.tasks.python.vision import HandLandmarker
 from mediapipe.tasks.python.vision import HandLandmarkerResult
@@ -15,6 +17,10 @@ from mediapipe.tasks.python.vision import HandLandmarkerOptions
 from mediapipe.tasks.python.vision import RunningMode
 # from mediapipe.tasks.python.core import BaseOptions
 from mediapipe.tasks.python.core import base_options
+
+#for segmentation model
+from mediapipe.tasks import python
+from mediapipe.tasks.python import vision
 
 import time #to make QR code popup temporary
 
