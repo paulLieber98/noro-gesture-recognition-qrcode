@@ -112,8 +112,8 @@ options_hand_detection = HandLandmarkerOptions(
 
 #DEFINING SEGMENTATION MODEL
 
-model_path = 'selfie_segmenter.tflite'
-base_options = BaseOptions(model_asset_path=model_path)
+# model_path = 'selfie_segmenter.tflite'
+# base_options = BaseOptions(model_asset_path=model_path)
 
 BaseOptions = mp.tasks.BaseOptions
 ImageSegmenter = mp.tasks.vision.ImageSegmenter
@@ -122,11 +122,13 @@ VisionRunningMode = mp.tasks.vision.RunningMode
 
 # Create a image segmenter instance with the live stream mode:
 def print_result_segmentation(result: List[Image], output_image: Image, timestamp_ms: int):
-    print('segmented masks size: {}'.format(len(result)))
+    # print('segmented masks size: {}'.format(len(result)))
+    print('Hi')
 
 options_segmentation = ImageSegmenterOptions(
     base_options=BaseOptions(model_asset_path='selfie_segmenter.tflite'),
-    running_mode=VisionRunningMode.VIDEO,
+    running_mode=VisionRunningMode.LIVE_STREAM,
+    result_callback=print_result_segmentation,
     output_category_mask=True)
     
 
@@ -157,7 +159,8 @@ with HandLandmarker.create_from_options(options_hand_detection) as landmarker:
 
             #real time feed so we need to give the timestamp of each individual frame since were using 'live stream' mode
             timestamp_ms = int(time.time() * 1000) #timestamp in milliseconds
-            landmarker.detect_async(mp_image, timestamp_ms) # processes and detects hands in video frame
+            landmarker.detect_async(mp_image, timestamp_ms) # processes and detects hands in video frame | HAND
+            segmenter.segment_async(mp_image, timestamp_ms) # processes and detects hands in video frame | SEGMENTATION
 
             #  to get rid of blue-ish color lens, we need to convert back to BGR
             final_frame = cv.cvtColor(new_RBG_frame, cv.COLOR_RGB2BGR)
