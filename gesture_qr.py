@@ -37,7 +37,6 @@ import numpy as np
 #init webcam class
 webcam = cv.VideoCapture(1)  #'1'= index of cameras -- this case, my default computer web-camera. 
 
-
 #defining QR code things
 qrcode_is_shown = False #starts as qrcode hidden
 qrcode_shown_start_time = 0 #starts at 0 seconds. going to last for 15 seconds (can be changed obviously)
@@ -49,6 +48,8 @@ def generate_qr():
     qr_array = cv.cvtColor(np.array(qr_converted), cv.COLOR_RGB2BGR) #convert to opencv image: takes only numpy array + BGR
     return qr_array
 
+
+last_person_mask = None #most recent segmented person mask. used later on
 
 #DEFINING HAND DETECTION MODEL
 
@@ -112,9 +113,6 @@ options_hand_detection = HandLandmarkerOptions(
 
 #DEFINING SEGMENTATION MODEL
 
-# model_path = 'selfie_segmenter.tflite'
-# base_options = BaseOptions(model_asset_path=model_path)
-
 BaseOptions = mp.tasks.BaseOptions
 ImageSegmenter = mp.tasks.vision.ImageSegmenter
 ImageSegmenterOptions = mp.tasks.vision.ImageSegmenterOptions
@@ -123,7 +121,11 @@ VisionRunningMode = mp.tasks.vision.RunningMode
 # Create a image segmenter instance with the live stream mode:
 def print_result_segmentation(result: List[Image], output_image: Image, timestamp_ms: int):
     # print('segmented masks size: {}'.format(len(result)))
-    print('Hi')
+    global last_person_mask
+    if result.category_mask: #if there is a person in the frame (category mask tells us if there is a person: person vs background)
+        mask = result.category_mask.numpy_view() #converting mediapipe image to numpy array for Opencv
+        last_person_mask = mask #updating the most recent person mask
+
 
 options_segmentation = ImageSegmenterOptions(
     base_options=BaseOptions(model_asset_path='selfie_segmenter.tflite'),
@@ -134,24 +136,54 @@ options_segmentation = ImageSegmenterOptions(
 
 
 # ACTUAL MODELS IN USE
-
-#actually init hand detection model
-with HandLandmarker.create_from_options(options_hand_detection) as landmarker:
-    with ImageSegmenter.create_from_options(options_segmentation) as segmenter:
+with HandLandmarker.create_from_options(options_hand_detection) as landmarker: #hand detection model
+    with ImageSegmenter.create_from_options(options_segmentation) as segmenter: #segmentation model
 
         #MAIN CAMERA LOOP
         while True: #camera on until user presses 'q'
 
             ret, frame = webcam.read() #ret: boolean value(True if camera gives a frame, False if not)
-            # frame: the actual individual frame from the video that were seeing ?
+            # frame: the actual individual frame from the video that were seeing (opencv image)
         
             if not ret: #if camera didn't give a frame --> exit
                 print("Can't receive frame (stream end?). Exiting ...")
                 break
-            
+
+            #zooming in on person
+            if last_person_mask is not None: #if person is detected in most recent frame
+
+                #resizing mask size to match actual webcam frame size
+                resized_mask = cv.resize(last_person_mask, (frame.shape[1], frame.shape[0]))
+
+                #making a binary mask (person = 255, background = 0)
+                #resized_mask == 1: if the pixel is a person, then it will be 1. if its background, then it will be 0.
+                binary_mask = (resized_mask == 1).astype(np.uint8) * 255 #255 to scale up the 1's to 255's for full white
+                #.astype(np.uint8) to convert to 8-bit integer(only non-negative integers and 0's.) Opencv expects integers
+
+                #finding contours (edges) of the person with .findContours() bc of our binary mask 0-255 earlier
+                #ignoring hierarchy(second value) bc we dont need it, hence the ', _' 
+                contours, _ = cv.findContours(binary_mask, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
+                #cv.RETR_EXTERNAL: only finds outermost contours
+                #cv.CHAIN_APPROX_SIMPLE: makes contour data more efficient (removes unnecessary points)
+
+                if contours: #if there are contours (which means there is a person)
+                    x, y, w, h = cv.boundingRect(max(contours, key=cv.contourArea)) #finds largest contour (which would be person)
+                    #x, y: coords for top left corner of box outlining person (mask)
+                    #w, h: width and height of box outlining person (mask)
+
+                    #cropping and resizing to zoom in on person
+                    cropped = frame[y:y+h, x:x+w] #crops the original video frame using the bounding box of the person
+                    zoomed = cv.resize(cropped, (frame.shape[1], frame.shape[0])) #[1]: width of original frame, [0]: height of original frame
+
+                    frame_to_use = zoomed #using the zoomed frame
+                else:
+                    frame_to_use = frame #if no person is detected, then use the original frame
+            else:
+                frame_to_use = frame #if no person is detected, then use the original frame
 
             # opencv uses BGR, mediapipe uses RGB. fixing order from BGR to RGB:
-            new_RBG_frame = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
+            new_RBG_frame = cv.cvtColor(frame_to_use, cv.COLOR_BGR2RGB)
+
             #convert opencv image to mediapipe image
             mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=new_RBG_frame) #doing this bc mediapipe doesn't use numpy frames like opencv does
                 #mp.ImageFormat.SRGB is the same thing as 'RBG' simply
@@ -165,7 +197,10 @@ with HandLandmarker.create_from_options(options_hand_detection) as landmarker:
             #  to get rid of blue-ish color lens, we need to convert back to BGR
             final_frame = cv.cvtColor(new_RBG_frame, cv.COLOR_RGB2BGR)
             #displaying frames in a window
-            cv.imshow('frame', final_frame) #displays frames in a window(thats what imshow does: opens a new window)
+            # cv.imshow('frame', final_frame) #displays frames in a window(thats what imshow does: opens a new window)
+
+            cv.imshow('frame', frame_to_use) #displays frames in a window(thats what imshow does: opens a new window)
+
 
 
             #displaying qrcode if it should be shown
