@@ -50,6 +50,7 @@ def generate_qr():
 
 
 last_person_mask = None #most recent segmented person mask. used later on
+binary_mask = None 
 
 #DEFINING HAND DETECTION MODEL
 
@@ -152,12 +153,25 @@ with HandLandmarker.create_from_options(options_hand_detection) as landmarker: #
             #zooming in on person
             if last_person_mask is not None: #if person is detected in most recent frame
 
+                print('Person detected by segmentation model')
+
                 #resizing mask size to match actual webcam frame size
                 resized_mask = cv.resize(last_person_mask, (frame.shape[1], frame.shape[0]))
 
+
+
+
+                resized_mask = cv.resize(last_person_mask, (frame.shape[1], frame.shape[0]))
+                print(f"Mask unique values: {np.unique(resized_mask)}")  # DEBUG: See what values are in the mask
+
+
+
+
+
+
                 #making a binary mask (person = 255, background = 0)
                 #resized_mask == 1: if the pixel is a person, then it will be 1. if its background, then it will be 0.
-                binary_mask = (resized_mask == 1).astype(np.uint8) * 255 #255 to scale up the 1's to 255's for full white
+                binary_mask = (resized_mask == 255).astype(np.uint8) * 255 #255 to scale up the 1's to 255's for full white
                 #.astype(np.uint8) to convert to 8-bit integer(only non-negative integers and 0's.) Opencv expects integers
 
                 #finding contours (edges) of the person with .findContours() bc of our binary mask 0-255 earlier
@@ -165,6 +179,15 @@ with HandLandmarker.create_from_options(options_hand_detection) as landmarker: #
                 contours, _ = cv.findContours(binary_mask, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
                 #cv.RETR_EXTERNAL: only finds outermost contours
                 #cv.CHAIN_APPROX_SIMPLE: makes contour data more efficient (removes unnecessary points)
+
+
+
+                print(f"Number of contours found: {len(contours)}")  # DEBUG: See if contours are found
+                if contours:
+                    print(f"Largest contour area: {cv.contourArea(max(contours, key=cv.contourArea))}")  # DEBUG: See contour size
+
+
+
 
                 if contours: #if there are contours (which means there is a person)
                     x, y, w, h = cv.boundingRect(max(contours, key=cv.contourArea)) #finds largest contour (which would be person)
@@ -175,7 +198,10 @@ with HandLandmarker.create_from_options(options_hand_detection) as landmarker: #
                     cropped = frame[y:y+h, x:x+w] #crops the original video frame using the bounding box of the person
                     zoomed = cv.resize(cropped, (frame.shape[1], frame.shape[0])) #[1]: width of original frame, [0]: height of original frame
 
+                    # Draw RED contours directly on the frame - you WILL see this!
+                    cv.drawContours(zoomed, [max(contours, key=cv.contourArea)], -1, (0, 0, 255), 3)
                     frame_to_use = zoomed #using the zoomed frame
+
                 else:
                     frame_to_use = frame #if no person is detected, then use the original frame
             else:
@@ -200,6 +226,9 @@ with HandLandmarker.create_from_options(options_hand_detection) as landmarker: #
             # cv.imshow('frame', final_frame) #displays frames in a window(thats what imshow does: opens a new window)
 
             cv.imshow('frame', frame_to_use) #displays frames in a window(thats what imshow does: opens a new window)
+
+            # if binary_mask is not None:
+            #     cv.imshow('Segmentation Mask', binary_mask)
 
 
 
