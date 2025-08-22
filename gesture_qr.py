@@ -145,6 +145,22 @@ VisionRunningMode = mp.tasks.vision.RunningMode.LIVE_STREAM
 def print_result_object_detection(result: DetectionResult, output_image: mp.Image, timestamp_ms: int):
     print(f'result: {result}')
 
+    global detected_people
+    detected_people = []
+    if result.detections:
+        for detection in result.detections:
+            # Check if the detected object is a person
+            if detection.categories[0].category_name.lower() == 'person':
+                # Get bounding box coordinates
+                bbox = detection.bounding_box
+                detected_people.append({
+                    'x': bbox.origin_x,
+                    'y': bbox.origin_y,
+                    'width': bbox.width,
+                    'height': bbox.height,
+                    'confidence': detection.categories[0].score
+                })
+
 #params for object detection model
 options_object_detection = ObjectDetectorOptions(
     base_options=BaseOptions(model_asset_path='efficientdet_lite0.tflite'),
@@ -156,85 +172,115 @@ options_object_detection = ObjectDetectorOptions(
 # ACTUAL MODELS IN USE
 with HandLandmarker.create_from_options(options_hand_detection) as landmarker: #hand detection model
     with ImageSegmenter.create_from_options(options_segmentation) as segmenter: #segmentation model
+        with ObjectDetector.create_from_options(options_object_detection) as detector: #object detection model
 
-        #MAIN CAMERA LOOP
-        while True: #camera on until user presses 'q'
-            ret, frame = webcam.read() #ret: boolean value(True if camera gives a frame, False if not)
-            # frame: the actual individual frame from the video that were seeing (opencv image)
-            if not ret: #if camera didn't give a frame --> exit
-                print("Can't receive frame (stream end?). Exiting ...")
-                break
 
-            #zooming in on person
-            if last_person_mask is not None: #if person is detected in most recent frame
-                # print('Person detected by segmentation model')
+            #FOR OBJECT DETECTION MODEL FOR RECTANGLE OUTLINES
+            detected_people = [] # Store detected people globally
 
-                #resizing mask size to match actual webcam frame size
-                resized_mask = cv.resize(last_person_mask, (frame.shape[1], frame.shape[0]))
 
-                #making a binary mask (person = 255, background = 0)
-                #resized_mask == 1: if the pixel is a person, then it will be 1. if its background, then it will be 0.
-                binary_mask = (resized_mask == 255).astype(np.uint8) * 255 #255 to scale up the 1's to 255's for full white
-                #.astype(np.uint8) to convert to 8-bit integer(only non-negative integers and 0's.) Opencv expects integers
 
-                #finding contours (edges) of the person with .findContours() bc of our binary mask 0-255 earlier
-                #ignoring hierarchy(second value) bc we dont need it, hence the ', _' 
-                contours, _ = cv.findContours(binary_mask, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
-                #cv.RETR_EXTERNAL: only finds outermost contours
-                #cv.CHAIN_APPROX_SIMPLE: makes contour data more efficient (removes unnecessary points)
 
-                if contours: #if there are contours (which means there is a person)
-                    x, y, w, h = cv.boundingRect(max(contours, key=cv.contourArea)) #finds largest contour (which would be person)
-                    #x, y: coords for top left corner of box outlining person (mask)
-                    #w, h: width and height of box outlining person (mask)
+            #MAIN CAMERA LOOP
+            while True: #camera on until user presses 'q'
+                ret, frame = webcam.read() #ret: boolean value(True if camera gives a frame, False if not)
+                # frame: the actual individual frame from the video that were seeing (opencv image)
+                if not ret: #if camera didn't give a frame --> exit
+                    print("Can't receive frame (stream end?). Exiting ...")
+                    break
 
-                    #cropping and resizing to zoom in on person
-                    cropped = frame[y:y+h, x:x+w] #crops the original video frame using the bounding box of the person
-                    zoomed = cv.resize(cropped, (frame.shape[1], frame.shape[0])) #[1]: width of original frame, [0]: height of original frame
 
-                    # Draw RED contours directly on the frame - you WILL see this!
-                    cv.drawContours(zoomed, [max(contours, key=cv.contourArea)], -1, (0, 0, 255), 3)
-                    frame_to_use = zoomed #using the zoomed frame
 
+
+
+                #draw rectangles around detected people
+                for person in detected_people:
+                    # Draw green rectangle around person
+                    cv.rectangle(frame, 
+                            (person['x'], person['y']), 
+                            (person['x'] + person['width'], person['y'] + person['height']), 
+                            (0, 0, 255), 2)  #red color, thickness 2
+
+
+
+
+
+
+
+
+
+                #zooming in on person
+                if last_person_mask is not None: #if person is detected in most recent frame
+                    # print('Person detected by segmentation model')
+
+                    #resizing mask size to match actual webcam frame size
+                    resized_mask = cv.resize(last_person_mask, (frame.shape[1], frame.shape[0]))
+
+                    #making a binary mask (person = 255, background = 0)
+                    #resized_mask == 1: if the pixel is a person, then it will be 1. if its background, then it will be 0.
+                    binary_mask = (resized_mask == 255).astype(np.uint8) * 255 #255 to scale up the 1's to 255's for full white
+                    #.astype(np.uint8) to convert to 8-bit integer(only non-negative integers and 0's.) Opencv expects integers
+
+                    #finding contours (edges) of the person with .findContours() bc of our binary mask 0-255 earlier
+                    #ignoring hierarchy(second value) bc we dont need it, hence the ', _' 
+                    contours, _ = cv.findContours(binary_mask, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
+                    #cv.RETR_EXTERNAL: only finds outermost contours
+                    #cv.CHAIN_APPROX_SIMPLE: makes contour data more efficient (removes unnecessary points)
+
+                    if contours: #if there are contours (which means there is a person)
+                        x, y, w, h = cv.boundingRect(max(contours, key=cv.contourArea)) #finds largest contour (which would be person)
+                        #x, y: coords for top left corner of box outlining person (mask)
+                        #w, h: width and height of box outlining person (mask)
+
+                        #cropping and resizing to zoom in on person
+                        cropped = frame[y:y+h, x:x+w] #crops the original video frame using the bounding box of the person
+                        zoomed = cv.resize(cropped, (frame.shape[1], frame.shape[0])) #[1]: width of original frame, [0]: height of original frame
+
+                        # Draw RED contours directly on the frame - you WILL see this!
+                        # cv.drawContours(zoomed, [max(contours, key=cv.contourArea)], -1, (0, 0, 255), 3) #COMMENTED OUT FOR NOW BECAUSE TRYING TO USE OBJECT DETECTION MODEL FOR OUTLINES INSTEAD
+                        # frame_to_use = zoomed #using the zoomed frame
+                        frame_to_use = frame #using the original frame
+
+                    else:
+                        frame_to_use = frame #if no person is detected, then use the original frame
                 else:
                     frame_to_use = frame #if no person is detected, then use the original frame
-            else:
-                frame_to_use = frame #if no person is detected, then use the original frame
 
-            # opencv uses BGR, mediapipe uses RGB. fixing order from BGR to RGB:
-            new_RBG_frame = cv.cvtColor(frame_to_use, cv.COLOR_BGR2RGB)
+                # opencv uses BGR, mediapipe uses RGB. fixing order from BGR to RGB:
+                new_RBG_frame = cv.cvtColor(frame_to_use, cv.COLOR_BGR2RGB)
 
-            #convert opencv image to mediapipe image
-            mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=new_RBG_frame) #doing this bc mediapipe doesn't use numpy frames like opencv does
-                #mp.ImageFormat.SRGB is the same thing as 'RBG' simply
+                #convert opencv image to mediapipe image
+                mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=new_RBG_frame) #doing this bc mediapipe doesn't use numpy frames like opencv does
+                    #mp.ImageFormat.SRGB is the same thing as 'RBG' simply
 
-            #real time feed so we need to give the timestamp of each individual frame since were using 'live stream' mode
-            timestamp_ms = int(time.time() * 1000) #timestamp in milliseconds
-            landmarker.detect_async(mp_image, timestamp_ms) # processes and detects hands in video frame | HAND
-            segmenter.segment_async(mp_image, timestamp_ms) # processes and detects hands in video frame | SEGMENTATION
+                #real time feed so we need to give the timestamp of each individual frame since were using 'live stream' mode
+                timestamp_ms = int(time.time() * 1000) #timestamp in milliseconds
+                landmarker.detect_async(mp_image, timestamp_ms) # processes and detects hands in video frame | HAND
+                segmenter.segment_async(mp_image, timestamp_ms) # processes and detects hands in video frame | SEGMENTATION
+                detector.detect_async(mp_image, timestamp_ms) # processes and detects hands in video frame | OBJECT DETECTION
 
-            #flip so not inverted (dont know why it does this by default)
-            frame_to_use = cv.flip(frame_to_use, 1)
-            cv.imshow('frame', frame_to_use) #displays frames in a window(thats what imshow does: opens a new window)
+                #flip so not inverted (dont know why it does this by default)
+                frame_to_use = cv.flip(frame_to_use, 1)
+                cv.imshow('frame', frame_to_use) #displays frames in a window(thats what imshow does: opens a new window)
 
-            #displaying qrcode if it should be shown
-            if should_show_qrcode:
-                qrcode_is_shown = True
-                qrcode_shown_start_time = time.time()
-                qrcode_generated = generate_qr()
-                cv.imshow('QR Code', qrcode_generated)
-                print("QR Code is being shown")
-                should_show_qrcode = False #resetting to False so that it doesnt show again
+                #displaying qrcode if it should be shown
+                if should_show_qrcode:
+                    qrcode_is_shown = True
+                    qrcode_shown_start_time = time.time()
+                    qrcode_generated = generate_qr()
+                    cv.imshow('QR Code', qrcode_generated)
+                    print("QR Code is being shown")
+                    should_show_qrcode = False #resetting to False so that it doesnt show again
 
-            #temporary popup for qrcode
-            if qrcode_is_shown and time.time() - qrcode_shown_start_time >= 10: # 10 seconds is the time qrcode is shown for
-                #time.time() = current time - the start time gives us the total time qrcode has been shown
-                qrcode_is_shown = False
-                qrcode_shown_start_time = 0
-                cv.destroyWindow('QR Code')
+                #temporary popup for qrcode
+                if qrcode_is_shown and time.time() - qrcode_shown_start_time >= 10: # 10 seconds is the time qrcode is shown for
+                    #time.time() = current time - the start time gives us the total time qrcode has been shown
+                    qrcode_is_shown = False
+                    qrcode_shown_start_time = 0
+                    cv.destroyWindow('QR Code')
 
-            if cv.waitKey(1) == ord('q'): #exit if user presses 'q'
-                break
+                if cv.waitKey(1) == ord('q'): #exit if user presses 'q'
+                    break
 
    
 webcam.release()
