@@ -52,15 +52,13 @@ def generate_qr():
 last_person_mask = None #most recent segmented person mask. used later on
 binary_mask = None 
 
+
 #DEFINING HAND DETECTION MODEL
-
-
 BaseOptions = base_options.BaseOptions
 HandLandmarker = mp.tasks.vision.HandLandmarker
 HandLandmarkerOptions = mp.tasks.vision.HandLandmarkerOptions
 HandLandmarkerResult = mp.tasks.vision.HandLandmarkerResult
 VisionRunningMode = mp.tasks.vision.RunningMode
-
 
 # Create a hand landmarker instance with the live stream mode:
 def print_result_hand_detection(result: HandLandmarkerResult, output_image: mp.Image, timestamp_ms: int):
@@ -73,6 +71,8 @@ def print_result_hand_detection(result: HandLandmarkerResult, output_image: mp.I
             # mp_drawing.draw_landmarks(new_RBG_frame, hand_landmarks, mp_hands.HAND_CONNECTIONS) #draws the green/red dots/lines on the hand
     
             #checking if index finger is only finger up
+
+            print(f'frame: {frame}')
 
             finger_threshold = 0.05 # increase to make detection stricter
 
@@ -103,7 +103,6 @@ def print_result_hand_detection(result: HandLandmarkerResult, output_image: mp.I
                     # cv.imshow('QR Code', qrcode)
                     should_show_qrcode = True
 
-
 #params for hand detection model
 options_hand_detection = HandLandmarkerOptions(
     base_options=BaseOptions(model_asset_path='hand_landmarker.task'), #hand detection model in root dir
@@ -112,8 +111,8 @@ options_hand_detection = HandLandmarkerOptions(
     num_hands=50) #50 hands max scannable (can be changed). thinking of it like in a conference room. Up to 25 people
 
 
-#DEFINING SEGMENTATION MODEL
 
+#DEFINING SEGMENTATION MODEL
 BaseOptions = mp.tasks.BaseOptions
 ImageSegmenter = mp.tasks.vision.ImageSegmenter
 ImageSegmenterOptions = mp.tasks.vision.ImageSegmenterOptions
@@ -127,13 +126,31 @@ def print_result_segmentation(result: List[Image], output_image: Image, timestam
         mask = result.category_mask.numpy_view() #converting mediapipe image to numpy array for Opencv
         last_person_mask = mask #updating the most recent person mask
 
-
+#params for segmentation model
 options_segmentation = ImageSegmenterOptions(
     base_options=BaseOptions(model_asset_path='selfie_segmenter.tflite'),
     running_mode=VisionRunningMode.LIVE_STREAM,
     result_callback=print_result_segmentation,
     output_category_mask=True)
-    
+
+
+
+#DEFINING OBJECT DETECTION MODEL (solely for putting rectangles around people)
+BaseOptions = mp.tasks.BaseOptions
+DetectionResult = mp.tasks.components.containers.Detection
+ObjectDetector = mp.tasks.vision.ObjectDetector
+ObjectDetectorOptions = mp.tasks.vision.ObjectDetectorOptions
+VisionRunningMode = mp.tasks.vision.RunningMode.LIVE_STREAM
+
+def print_result_object_detection(result: DetectionResult, output_image: mp.Image, timestamp_ms: int):
+    print(f'result: {result}')
+
+#params for object detection model
+options_object_detection = ObjectDetectorOptions(
+    base_options=BaseOptions(model_asset_path='efficientdet_lite0.tflite'),
+    running_mode=VisionRunningMode.LIVE_STREAM,
+    max_results=5,
+    result_callback=print_result_object_detection)
 
 
 # ACTUAL MODELS IN USE
@@ -142,32 +159,18 @@ with HandLandmarker.create_from_options(options_hand_detection) as landmarker: #
 
         #MAIN CAMERA LOOP
         while True: #camera on until user presses 'q'
-
             ret, frame = webcam.read() #ret: boolean value(True if camera gives a frame, False if not)
             # frame: the actual individual frame from the video that were seeing (opencv image)
-        
             if not ret: #if camera didn't give a frame --> exit
                 print("Can't receive frame (stream end?). Exiting ...")
                 break
 
             #zooming in on person
             if last_person_mask is not None: #if person is detected in most recent frame
-
-                print('Person detected by segmentation model')
+                # print('Person detected by segmentation model')
 
                 #resizing mask size to match actual webcam frame size
                 resized_mask = cv.resize(last_person_mask, (frame.shape[1], frame.shape[0]))
-
-
-
-
-                resized_mask = cv.resize(last_person_mask, (frame.shape[1], frame.shape[0]))
-                print(f"Mask unique values: {np.unique(resized_mask)}")  # DEBUG: See what values are in the mask
-
-
-
-
-
 
                 #making a binary mask (person = 255, background = 0)
                 #resized_mask == 1: if the pixel is a person, then it will be 1. if its background, then it will be 0.
@@ -179,15 +182,6 @@ with HandLandmarker.create_from_options(options_hand_detection) as landmarker: #
                 contours, _ = cv.findContours(binary_mask, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
                 #cv.RETR_EXTERNAL: only finds outermost contours
                 #cv.CHAIN_APPROX_SIMPLE: makes contour data more efficient (removes unnecessary points)
-
-
-
-                print(f"Number of contours found: {len(contours)}")  # DEBUG: See if contours are found
-                if contours:
-                    print(f"Largest contour area: {cv.contourArea(max(contours, key=cv.contourArea))}")  # DEBUG: See contour size
-
-
-
 
                 if contours: #if there are contours (which means there is a person)
                     x, y, w, h = cv.boundingRect(max(contours, key=cv.contourArea)) #finds largest contour (which would be person)
@@ -214,23 +208,14 @@ with HandLandmarker.create_from_options(options_hand_detection) as landmarker: #
             mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=new_RBG_frame) #doing this bc mediapipe doesn't use numpy frames like opencv does
                 #mp.ImageFormat.SRGB is the same thing as 'RBG' simply
 
-
             #real time feed so we need to give the timestamp of each individual frame since were using 'live stream' mode
             timestamp_ms = int(time.time() * 1000) #timestamp in milliseconds
             landmarker.detect_async(mp_image, timestamp_ms) # processes and detects hands in video frame | HAND
             segmenter.segment_async(mp_image, timestamp_ms) # processes and detects hands in video frame | SEGMENTATION
 
-            #  to get rid of blue-ish color lens, we need to convert back to BGR
-            final_frame = cv.cvtColor(new_RBG_frame, cv.COLOR_RGB2BGR)
-            #displaying frames in a window
-            # cv.imshow('frame', final_frame) #displays frames in a window(thats what imshow does: opens a new window)
-
+            #flip so not inverted (dont know why it does this by default)
+            frame_to_use = cv.flip(frame_to_use, 1)
             cv.imshow('frame', frame_to_use) #displays frames in a window(thats what imshow does: opens a new window)
-
-            # if binary_mask is not None:
-            #     cv.imshow('Segmentation Mask', binary_mask)
-
-
 
             #displaying qrcode if it should be shown
             if should_show_qrcode:
