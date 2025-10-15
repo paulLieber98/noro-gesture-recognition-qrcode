@@ -107,16 +107,18 @@ VisionRunningMode = mp.tasks.vision.RunningMode
 #         last_person_mask = mask #updating the most recent person mask
 def print_result_segmentation(result: List[Image], output_image: Image, timestamp_ms: int):
     global last_person_mask, last_person_prob
-    # Category (argmax) mask
+    #category (argmax) mask → one integer per pixel:
+    #   0 = background, 1 = person
     if result.category_mask:
         last_person_mask = result.category_mask.numpy_view()
-    # Confidence masks (per-class probabilities)
+
+    # Confidence masks → per-class probabilities (float in [0, 1]) for each pixel.
+    # Selfie Segmenter usually returns 2 channels: [background_prob, person_prob].
+    # We prefer the person probability channel (index 1) when available.
     if getattr(result, "confidence_masks", None):
         cms = result.confidence_masks
-        # Selfie segmenter typically has 2 channels: background, person.
-        # Prefer index 1 if present; else fall back to 0.
-        idx = 1 if len(cms) > 1 else 0
-        last_person_prob = cms[idx].numpy_view()
+        idx = 1 if len(cms) > 1 else 0  # pick person channel if present, else fallback
+        last_person_prob = cms[idx].numpy_view()  # float mask: person probability per pixel
 
 
 #PARAMS FOR SEGMENTATION MODEL
@@ -206,7 +208,13 @@ with HandLandmarker.create_from_options(options_hand_detection) as handmodel: #h
                 if last_person_mask is not None: #if person is detected in most recent frame
                     # print('Person detected by segmentation model')
 
-                    src_mask = last_person_prob if last_person_prob is not None else last_person_mask #explain
+                    # Prefer the probability mask (smoother, less noisy). If it's not available yet,
+                    # fall back to the category/label mask so the app still works.
+                    if last_person_prob is not None:
+                        src_mask = last_person_prob
+                    else:
+                        src_mask = last_person_mask
+
 
                     #binary mask:
                     #if float probs in [0,1], threshold at 0.5
@@ -231,10 +239,16 @@ with HandLandmarker.create_from_options(options_hand_detection) as handmodel: #h
 
 
                     #clean up mask to remove noise and close small holes/gaps
-                    kernel = np.ones((3, 3), np.uint8) #kernel [...] ADD EXPLANATION
-                    binary_mask = cv.morphologyEx(binary_mask, cv.MORPH_OPEN, kernel, iterations=1) #ADD EXPLANATION
-                    binary_mask = cv.morphologyEx(binary_mask, cv.MORPH_CLOSE, kernel, iterations=2) #ADD EXPLANATION
+                    kernel = np.ones((3, 3), np.uint8) # 3x3 square structuring element
+                    binary_mask = cv.morphologyEx(binary_mask, cv.MORPH_OPEN, kernel, iterations=1) # remove small noise
+                    binary_mask = cv.morphologyEx(binary_mask, cv.MORPH_CLOSE, kernel, iterations=2) # fill small holes/gaps
 
+                    # Connected components → group white pixels into blobs (people candidates).
+                    # Returns:
+                    # - num_labels: number of blobs (incl. background)
+                    # - labels: image assigning a blob id to each pixel
+                    # - stats: per-blob stats: [x, y, w, h, area]
+                    # - _: centroids (unused)
                     num_labels, labels, stats, _ = cv.connectedComponentsWithStats(binary_mask, connectivity = 8) #EXPLANATION
 
                     people_boxes = []
@@ -255,6 +269,9 @@ with HandLandmarker.create_from_options(options_hand_detection) as handmodel: #h
                             continue
 
                         #dropping components that make the box fit the entire frame (dont wnat that)
+                        # Guard against the classic failure where the mask is almost the whole frame.
+                        # If a component touches both left+right edges or top+bottom edges, or is >90% of frame area,
+                        # we skip it so we don't draw a full-frame rectangle.
                         touch_left = x<=2
                         touch_top = y <=2 
                         touch_right = (x+w) >= (W - 3)
@@ -265,6 +282,7 @@ with HandLandmarker.create_from_options(options_hand_detection) as handmodel: #h
                             continue
 
                         #to include hands slightly outside the body mask/box
+                        # Add 5% padding so hands slightly outside the person silhouette are still inside the crop.
                         hands_slight_outside = int(0.05 * max(w, h))
                         x1 = max(0, x - hands_slight_outside)
                         y1 = max(0, y - hands_slight_outside)
