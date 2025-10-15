@@ -216,9 +216,9 @@ with HandLandmarker.create_from_options(options_hand_detection) as handmodel: #h
                         src_mask = last_person_mask
 
 
-                    #binary mask:
-                    #if float probs in [0,1], threshold at 0.5
-                    #if integer labels {0,1} or {0,255}, any non-zero is a person
+                    #binary mask: CONVERTS INTO BLACK AND WHITE IMAGE FOR OPENCV (255 = white, 0 = black)
+                    #if a value is a float in between 0 and 1, threshold at 0.5
+                    #if an integer of either {0,1} or {0,255}, any non-zero is a person (duh)
                     if np.issubdtype(src_mask.dtype, np.floating):
                         binary_mask = (src_mask > 0.5).astype(np.uint8) * 255
                     else:
